@@ -1193,7 +1193,48 @@ struct TerminalJumpService {
             return exact
         }
 
-        return Self.knownApps.first(where: isInstalled(descriptor:))
+        // A terminal we can name but don't have a jump recipe for (Termany was
+        // the first): activate the app itself. No window/tab precision, but it
+        // puts the user in front of the right program.
+        if let installed = Self.installedAppDescriptor(named: preferredName) {
+            return installed
+        }
+
+        // Nothing matched. Return nil so jump() falls through to the Finder cwd
+        // fallback.
+        //
+        // The old code picked `knownApps.first(where: isInstalled)` here — i.e.
+        // *any* installed terminal — which is how a session in an unrecognised
+        // terminal ended up opening Terminal.app. The comment above about
+        // "Unknown" already called that behaviour out; it just only guarded the
+        // literal "unknown" sentinel, so every genuinely-named-but-unsupported
+        // terminal still fell into it.
+        return nil
+    }
+
+    /// Builds a descriptor for an installed `.app` whose name matches, so we can
+    /// at least activate it. Looks in the standard locations only — we are not
+    /// searching the disk on every jump.
+    private static func installedAppDescriptor(named name: String) -> TerminalAppDescriptor? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidates = [
+            "/Applications/\(trimmed).app",
+            "\(NSHomeDirectory())/Applications/\(trimmed).app",
+            "/System/Applications/\(trimmed).app",
+            "/System/Applications/Utilities/\(trimmed).app",
+        ]
+        for path in candidates where FileManager.default.fileExists(atPath: path) {
+            guard let bundle = Bundle(path: path),
+                  let identifier = bundle.bundleIdentifier
+            else { continue }
+            return TerminalAppDescriptor(
+                displayName: trimmed,
+                bundleIdentifier: identifier,
+                aliases: [trimmed.lowercased()]
+            )
+        }
+        return nil
     }
 
     private func normalizeTerminalAppName(_ preferredName: String) -> String {

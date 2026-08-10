@@ -1408,6 +1408,10 @@ private struct IslandSessionRow: View {
         let tint = Color(hex: session.tool.brandColorHex) ?? V6Palette.paper
         return Text(agentBadgeTitle)
             .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            // 与 sideBadge 同样的道理：多一个徽章跟它抢宽度，它就会被压成竖条
+            // （真机截图里 "claude" 变成了一根竖着的药丸）。
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(tint.opacity(notificationChromeOpacity))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
