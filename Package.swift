@@ -34,6 +34,10 @@ let package = Package(
         .target(
             name: "OpenIslandCore"
         ),
+        .target(
+            name: "OpenIslandAgora",
+            dependencies: ["OpenIslandCore"]
+        ),
         .executableTarget(
             name: "OpenIslandHooks",
             dependencies: ["OpenIslandCore"]
@@ -46,6 +50,7 @@ let package = Package(
             name: "OpenIslandApp",
             dependencies: [
                 "OpenIslandCore",
+                "OpenIslandAgora",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
@@ -56,6 +61,10 @@ let package = Package(
         .testTarget(
             name: "OpenIslandCoreTests",
             dependencies: ["OpenIslandCore"]
+        ),
+        .testTarget(
+            name: "OpenIslandAgoraTests",
+            dependencies: ["OpenIslandAgora", "OpenIslandCore"]
         ),
         .testTarget(
             name: "OpenIslandAppTests",
