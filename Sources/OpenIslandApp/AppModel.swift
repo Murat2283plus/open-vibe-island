@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import OpenIslandAgora
 import OpenIslandCore
 import SwiftUI
 
@@ -511,6 +512,7 @@ final class AppModel {
 
     @ObservationIgnored
     private let bridgeServer = BridgeServer()
+    private let agoraSentinel = AgoraSentinelForwarder()
 
     @ObservationIgnored
     private var bridgeClient = LocalBridgeClient()
@@ -1499,6 +1501,10 @@ final class AppModel {
         }
 
         state.apply(event)
+        if let agoraSessionID = event.agoraSessionID,
+           let observed = state.session(id: agoraSessionID) {
+            agoraSentinel.ingest(observed)
+        }
         reconcileIslandSurfaceAfterStateChange()
         if ingress == .bridge {
             monitoring.markSessionAttached(for: event)
