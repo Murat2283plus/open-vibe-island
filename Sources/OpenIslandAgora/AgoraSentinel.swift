@@ -135,9 +135,20 @@ public final class AgoraSentinelForwarder: @unchecked Sendable {
     public func ingest(_ session: AgentSession) {
         let event = AgoraSentinelEvent.from(session)
         queue.async { [self] in
-            guard let token = cachedToken() else { return }
+            guard let token = cachedToken() else {
+                logOnce("sentinel dormant: no Agora capability token")
+                return
+            }
             post(events: [event], token: token)
         }
+    }
+
+    private var loggedMessages = Set<String>()
+
+    private func logOnce(_ message: String) {
+        guard !loggedMessages.contains(message) else { return }
+        loggedMessages.insert(message)
+        FileHandle.standardError.write(Data("[AgoraSentinel] \(message)\n".utf8))
     }
 
     private func cachedToken() -> String? {
@@ -154,7 +165,14 @@ public final class AgoraSentinelForwarder: @unchecked Sendable {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        urlSession.dataTask(with: request).resume()
+        let task = urlSession.dataTask(with: request) { [self] _, response, error in
+            if let error {
+                queue.async { self.logOnce("sentinel post failed: \(error.localizedDescription)") }
+            } else if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                queue.async { self.logOnce("sentinel post rejected: HTTP \(http.statusCode)") }
+            }
+        }
+        task.resume()
     }
 
     /// Token sources, in order: `AGORA_ISLAND_TOKEN` env (tests / dev), then
