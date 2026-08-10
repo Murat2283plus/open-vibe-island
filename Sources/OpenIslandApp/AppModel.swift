@@ -513,6 +513,10 @@ final class AppModel {
     @ObservationIgnored
     private let bridgeServer = BridgeServer()
     private let agoraSentinel = AgoraSentinelForwarder()
+    /// 会话 → Agora 房间身份。只读镜像，Agora 才是成员关系的真相源。
+    private let agoraRooms = AgoraRoomBindingStore()
+    /// 供视图读取的房间身份表（按会话 id）。@Observable 靠属性变更驱动刷新。
+    private(set) var agoraRoomBindings: [String: AgoraRoomBinding] = [:]
 
     @ObservationIgnored
     private var bridgeClient = LocalBridgeClient()
@@ -1116,6 +1120,16 @@ final class AppModel {
             harnessRuntimeMonitor?.recordMilestone("bridgeSkipped", message: lastActionMessage)
             return
         }
+
+        agoraRooms.onChange = { [weak self] in
+            // 徽章变化要立刻反映到岛上，否则"谁在跟谁组队"会滞后一个轮询周期。
+            // 回调来自轮询线程，属性是 main-actor 隔离的，必须显式跳回主线程。
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.agoraRoomBindings = self.agoraRooms.snapshot()
+            }
+        }
+        agoraRooms.start()
 
         do {
             try bridgeServer.start()
