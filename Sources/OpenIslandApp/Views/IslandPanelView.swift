@@ -1,5 +1,6 @@
 import SwiftUI
 @preconcurrency import MarkdownUI
+import OpenIslandAgora
 import OpenIslandCore
 
 private struct NotificationContentHeightKey: PreferenceKey {
@@ -585,6 +586,7 @@ struct IslandPanelView: View {
                     useDrawingGroup: model.notchStatus == .opened,
                     isInteractive: model.notchStatus == .opened,
                     presentation: .notification,
+                    agoraBinding: model.agoraRoomBindings[session.id],
                     sideInset: sessionListSideInset,
                     lang: model.lang,
                     onApprove: { model.approvePermission(for: session.id, action: $0) },
@@ -626,6 +628,7 @@ struct IslandPanelView: View {
                                 isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
                                 useDrawingGroup: model.notchStatus == .opened,
                                 isInteractive: model.notchStatus == .opened,
+                                agoraBinding: model.agoraRoomBindings[session.id],
                                 sideInset: sessionListSideInset,
                                 lang: model.lang,
                                 onApprove: { model.approvePermission(for: session.id, action: $0) },
@@ -676,6 +679,7 @@ struct IslandPanelView: View {
                         isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
                         useDrawingGroup: model.notchStatus == .opened,
                         isInteractive: model.notchStatus == .opened,
+                        agoraBinding: model.agoraRoomBindings[session.id],
                         sideInset: sessionListSideInset,
                         lang: model.lang,
                         onApprove: { model.approvePermission(for: session.id, action: $0) },
@@ -1187,6 +1191,8 @@ private struct IslandSessionRow: View {
     var useDrawingGroup: Bool = true
     var isInteractive: Bool = true
     var presentation: IslandSessionRowPresentation = .list
+    /// 这个会话在 Agora 房间里的身份（没参与协作时为 nil）。
+    var agoraBinding: AgoraRoomBinding?
     var sideInset: CGFloat = 16
     var lang: LanguageManager = .shared
     var onApprove: ((ApprovalAction) -> Void)?
@@ -1289,6 +1295,9 @@ private struct IslandSessionRow: View {
                 agentBadge
                 if session.isRemote {
                     sideBadge("SSH")
+                }
+                if let agoraBinding {
+                    agoraRoomBadge(agoraBinding)
                 }
                 if let terminalBadge = session.spotlightTerminalBadge {
                     sideBadge(terminalBadge)
@@ -1404,6 +1413,34 @@ private struct IslandSessionRow: View {
             .padding(.vertical, 3)
             .background(tint.opacity(notificationBadgeFillOpacity), in: Capsule())
             .overlay(Capsule().stroke(tint.opacity(notificationBadgeStrokeOpacity), lineWidth: 1))
+    }
+
+    /// Agora 房间身份。刻意与灰色的终端/SSH 徽章拉开颜色 —— 岛上一排会话里，
+    /// "谁在跟谁组队"和"谁在单干"必须一眼分得开，这正是此前两套视图各说各话的地方。
+    private func agoraRoomBadge(_ binding: AgoraRoomBinding) -> some View {
+        HStack(spacing: 3) {
+            if binding.isModerator {
+                Text("主")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .opacity(0.9)
+            }
+            Text(binding.badgeText)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            if !binding.canSpeak {
+                Text("禁言")
+                    .font(.system(size: 8.5, weight: .medium))
+                    .opacity(0.9)
+            }
+        }
+        .foregroundStyle(Color(red: 0.49, green: 0.83, blue: 0.99))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Color(red: 0.49, green: 0.83, blue: 0.99)
+                .opacity(presentation == .notification ? 0.10 : 0.14),
+            in: Capsule()
+        )
+        .help("Agora 房间 \(binding.room)（\(binding.roomName)）· \(binding.memberCount) 人")
     }
 
     private func sideBadge(_ title: String) -> some View {

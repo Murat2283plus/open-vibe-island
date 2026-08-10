@@ -1271,7 +1271,94 @@ public extension ClaudeHookPayload {
             return "IntelliJ IDEA"  // Fallback for unknown JetBrains IDE
         }
 
+        // Last resort: nothing self-identified. Walk the process ancestry and
+        // take the first `.app` bundle we find.
+        //
+        // This is *more* trustworthy than the env-var fallbacks above — a
+        // process's real parent chain cannot leak across apps the way
+        // GUI-inherited variables can. It is last only because it costs a
+        // process-table read, and the cheap signals already cover every
+        // terminal that bothers to set TERM_PROGRAM.
+        //
+        // Concrete case this fixes: Termany sets no terminal env var at all
+        // (only `__CFBundleIdentifier=ai.termany.desktop`), so every session
+        // running in it showed up as "Unknown" — which also left the session
+        // without a usable jumpTarget.
+        return Self.hostAppFromProcessAncestry()
+    }
+
+    /// Name of the nearest ancestor process that lives inside an `.app` bundle.
+    ///
+    /// Reads the process table **once** rather than walking parent-by-parent:
+    /// hooks fire on every tool use, and a per-level `ps` would multiply that
+    /// cost by the depth of the chain (measured: one table read ≈ the same as
+    /// two single-process reads, and the chain is 4–5 deep in practice).
+    static func hostAppFromProcessAncestry(
+        startPID: Int32? = nil,
+        tableProvider: (() -> String?)? = nil,
+        maxDepth: Int = 12
+    ) -> String? {
+        let table = tableProvider?() ?? processTableSnapshot()
+        guard let table else { return nil }
+
+        var parents: [Int32: Int32] = [:]
+        var executables: [Int32: String] = [:]
+        for line in table.split(separator: "\n") {
+            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard fields.count == 3,
+                  let pid = Int32(fields[0]),
+                  let ppid = Int32(fields[1])
+            else { continue }
+            parents[pid] = ppid
+            executables[pid] = String(fields[2])
+        }
+
+        var pid = startPID ?? getppid()
+        for _ in 0..<maxDepth {
+            guard pid > 1 else { return nil }
+            if let path = executables[pid], let name = appBundleName(fromExecutablePath: path) {
+                return name
+            }
+            guard let parent = parents[pid], parent != pid else { return nil }
+            pid = parent
+        }
         return nil
+    }
+
+    /// `/Applications/Termany.app/Contents/MacOS/app` → `Termany`
+    ///
+    /// Bundles that live inside a `.framework` are rejected: they are runtime
+    /// plumbing, not apps a user could switch to. Real case this guards
+    /// against — CPython ships
+    /// `/Library/Frameworks/Python.framework/.../Resources/Python.app`, so any
+    /// agent launched by a Python process (every `summon`ed agent, for one)
+    /// would otherwise be labelled "Python". That is worse than "Unknown":
+    /// it claims a terminal that does not exist, and jump would chase it.
+    static func appBundleName(fromExecutablePath path: String) -> String? {
+        guard let bundleRange = path.range(of: ".app/") else { return nil }
+        let beforeExtension = path[..<bundleRange.lowerBound]
+        guard !beforeExtension.contains(".framework/") else { return nil }
+        guard let separator = beforeExtension.lastIndex(of: "/") else { return nil }
+        let name = String(beforeExtension[beforeExtension.index(after: separator)...])
+        return name.isEmpty ? nil : name
+    }
+
+    private static func processTableSnapshot() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-Ao", "pid=,ppid=,comm="]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     private func currentTTY() -> String? {
