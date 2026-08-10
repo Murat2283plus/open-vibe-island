@@ -1418,34 +1418,41 @@ private struct IslandSessionRow: View {
     /// Agora 房间身份。刻意与灰色的终端/SSH 徽章拉开颜色 —— 岛上一排会话里，
     /// "谁在跟谁组队"和"谁在单干"必须一眼分得开，这正是此前两套视图各说各话的地方。
     private func agoraRoomBadge(_ binding: AgoraRoomBinding) -> some View {
-        HStack(spacing: 3) {
+        // 只放房间码 —— 这一行横向空间极紧（agent 徽章 + 终端 + 时长 + 两个按钮），
+        // 塞进成员名会把胶囊挤到换行、压成一坨（真机截图为证）。成员名、房间名和
+        // 人数进悬停提示，展开行里也能看到。
+        HStack(spacing: 2) {
+            Text("#\(binding.room)")
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
             if binding.isModerator {
-                Text("主")
-                    .font(.system(size: 8.5, weight: .bold))
-                    .opacity(0.9)
+                Text("主").font(.system(size: 8, weight: .bold)).opacity(0.85)
             }
-            Text(binding.badgeText)
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
             if !binding.canSpeak {
-                Text("禁言")
-                    .font(.system(size: 8.5, weight: .medium))
-                    .opacity(0.9)
+                Text("禁").font(.system(size: 8, weight: .bold)).opacity(0.85)
             }
         }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(Color(red: 0.49, green: 0.83, blue: 0.99))
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 7)
         .padding(.vertical, 3)
         .background(
             Color(red: 0.49, green: 0.83, blue: 0.99)
                 .opacity(presentation == .notification ? 0.10 : 0.14),
             in: Capsule()
         )
-        .help("Agora 房间 \(binding.room)（\(binding.roomName)）· \(binding.memberCount) 人")
+        .help("Agora 房间 \(binding.room)（\(binding.roomName)）· 你的身份 \(binding.displayName)"
+              + " · \(binding.memberCount) 人"
+              + (binding.isModerator ? " · 主持人" : "")
+              + (binding.canSpeak ? "" : " · 已被禁言"))
     }
 
     private func sideBadge(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            // 没有这两行，横向一紧就会断成 "Unkno / wn" 并把胶囊压成球。
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(V6Palette.paper.opacity(presentation == .notification ? 0.52 : 0.7))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
