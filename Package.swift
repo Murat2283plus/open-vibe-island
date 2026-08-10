@@ -39,6 +39,10 @@ let package = Package(
             dependencies: ["OpenIslandCore"]
         ),
         .executableTarget(
+            name: "OpenIslandAgoraProbe",
+            dependencies: ["OpenIslandAgora", "OpenIslandCore"]
+        ),
+        .executableTarget(
             name: "OpenIslandHooks",
             dependencies: ["OpenIslandCore"]
         ),

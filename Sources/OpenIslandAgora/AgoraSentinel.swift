@@ -128,7 +128,7 @@ public final class AgoraSentinelForwarder: @unchecked Sendable {
             ?? URL(string: "http://127.0.0.1:4577")!
         self.endpoint = base.appendingPathComponent("api/island/sentinel/events")
         self.urlSession = urlSession
-        self.tokenProvider = tokenProvider ?? Self.defaultTokenProvider
+        self.tokenProvider = tokenProvider ?? Self.keychainTokenProvider
     }
 
     /// Fire-and-forget. Never throws, never blocks the caller thread on IO.
@@ -178,7 +178,7 @@ public final class AgoraSentinelForwarder: @unchecked Sendable {
     /// Token sources, in order: `AGORA_ISLAND_TOKEN` env (tests / dev), then
     /// the Keychain capability Agora provisions for its island clients. Both
     /// missing → sensor stays dormant.
-    private static let defaultTokenProvider: @Sendable () -> String? = {
+    public static let keychainTokenProvider: @Sendable () -> String? = {
         if let env = ProcessInfo.processInfo.environment["AGORA_ISLAND_TOKEN"],
            !env.isEmpty {
             return env
